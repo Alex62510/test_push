@@ -200,6 +200,95 @@
         return { p256dh: p256dh, auth: authKey };
     }
 
+    function truncate(value, maxLen) {
+        var s = asString(value);
+        if (!s || !maxLen) {
+            return s;
+        }
+        return s.length > maxLen ? s.slice(0, maxLen) : s;
+    }
+
+    function detectBrowser() {
+        var ua = navigator.userAgent || '';
+        if (/YaBrowser|yabrowser/i.test(ua)) {
+            return 'Yandex';
+        }
+        if (/OPR\/|Opera/i.test(ua)) {
+            return 'Opera';
+        }
+        if (/Firefox/i.test(ua)) {
+            return 'Firefox';
+        }
+        if (/Edg/i.test(ua)) {
+            return 'Edge';
+        }
+        if (/Chrome|CriOS|Chromium/i.test(ua)) {
+            return 'Chrome';
+        }
+        if (/Safari/i.test(ua)) {
+            return 'Safari';
+        }
+
+        return truncate(ua, 64) || 'Other';
+    }
+
+    function detectOs() {
+        var ua = navigator.userAgent || '';
+        if (/Android/i.test(ua)) {
+            return 'Android';
+        }
+        if (/iPhone|iPad|iPod/i.test(ua)) {
+            return 'iOS';
+        }
+        if (/Windows/i.test(ua)) {
+            return 'Windows';
+        }
+        if (/Mac OS X|Macintosh/i.test(ua)) {
+            return 'macOS';
+        }
+        if (/Linux/i.test(ua)) {
+            return 'Linux';
+        }
+
+        return '';
+    }
+
+    function detectLang() {
+        if (navigator.language) {
+            return navigator.language.substring(0, 8);
+        }
+
+        return '';
+    }
+
+    function subscribeClientMeta() {
+        return {
+            browser: truncate((pushConfig && pushConfig.browser) || detectBrowser(), 64),
+            os: truncate((pushConfig && pushConfig.os) || detectOs(), 64),
+            lang: truncate((pushConfig && pushConfig.lang) || detectLang(), 8),
+        };
+    }
+
+    function buildSubscribeBody(subscription, keys) {
+        var meta = subscribeClientMeta();
+        var body = {
+            embed_secret: pushConfig.embedSecret,
+            endpoint: subscription.endpoint,
+            p256dh: keys.p256dh,
+            auth: keys.auth,
+            client_id: pushConfig.clientId || '',
+            browser: meta.browser,
+            os: meta.os,
+            lang: meta.lang,
+        };
+
+        if (pushConfig.custom_data && typeof pushConfig.custom_data === 'object') {
+            body.custom_data = pushConfig.custom_data;
+        }
+
+        return body;
+    }
+
     self.addEventListener('message', function (event) {
         if (event.data && event.data.type === 'push-config') {
             pushConfig = event.data;
@@ -221,13 +310,7 @@
                     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
                     credentials: 'omit',
                     mode: 'cors',
-                    body: JSON.stringify({
-                        embed_secret: pushConfig.embedSecret,
-                        endpoint: subscription.endpoint,
-                        p256dh: keys.p256dh,
-                        auth: keys.auth,
-                        client_id: pushConfig.clientId || '',
-                    }),
+                    body: JSON.stringify(buildSubscribeBody(subscription, keys)),
                 });
             })
         );
@@ -293,5 +376,4 @@
             })
         );
     });
-
 })();
